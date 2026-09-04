@@ -1,71 +1,71 @@
 package org.gephi.toolkit.benchmark.layout;
 
+
 import java.util.concurrent.TimeUnit;
 import org.gephi.graph.api.GraphModel;
-import org.gephi.toolkit.benchmark.RandomGraphs;
-import org.openjdk.jmh.annotations.Benchmark;
-import org.openjdk.jmh.annotations.BenchmarkMode;
-import org.openjdk.jmh.annotations.Fork;
-import org.openjdk.jmh.annotations.Level;
-import org.openjdk.jmh.annotations.Mode;
-import org.openjdk.jmh.annotations.OutputTimeUnit;
-import org.openjdk.jmh.annotations.Scope;
-import org.openjdk.jmh.annotations.Setup;
-import org.openjdk.jmh.annotations.State;
-import org.openjdk.jmh.annotations.TearDown;
+import org.gephi.layout.plugin.forceAtlas2.ForceAtlas2Builder;
+import org.gephi.layout.spi.Layout;
+import org.gephi.toolkit.benchmark.GexfGraph;
 
-@BenchmarkMode(Mode.AverageTime)
-@OutputTimeUnit(TimeUnit.MICROSECONDS)
-@Fork(0)
+import org.openjdk.jmh.annotations.*;
+import snapshot.org.gephi.layout.plugin.forceAtlas2.ForceAtlas2;
+
+
+@BenchmarkMode(Mode.SingleShotTime)
+@OutputTimeUnit(TimeUnit.MILLISECONDS)
+@Fork(1)
 public class ForceAtlas2StableVsSnapshotBenchmark {
 
-    private static final int NODE_COUNT = 200;
 
-    @State(Scope.Thread)
-    public static class StableState {
+    @State(Scope.Benchmark)
+    public static class BenchmarkState  {
 
-        private org.gephi.layout.plugin.forceAtlas2.ForceAtlas2 layout;
+
+
+
+        @Param({"snapshot","stable"})
+        public String layout;
+
+        @Param({"comic-hero-network.gexf","rfc.gexf","World_flight_routes.gexf"})
+        public String gexf;
+
+        @Param({"true","false"})
+        public boolean barnesHut;
+        public Layout useLayout = null;
 
         @Setup(Level.Trial)
         public void setup() {
-            GraphModel graphModel = RandomGraphs.newRandomGraphModel(NODE_COUNT);
-            layout = new org.gephi.layout.plugin.forceAtlas2.ForceAtlas2Builder().buildLayout();
-            layout.setGraphModel(graphModel);
-            layout.initAlgo();
+
+            GraphModel graphModel = GexfGraph.loadGexf(GexfGraph.getFile(gexf));
+
+            if(layout.equals("stable"))
+            {
+                org.gephi.layout.plugin.forceAtlas2.ForceAtlas2 current_layout = new ForceAtlas2Builder().buildLayout();
+                current_layout.setBarnesHutOptimize(barnesHut);
+                useLayout = current_layout;
+            }
+            if(layout.equals("snapshot"))
+            {
+                ForceAtlas2 current_layout = new snapshot.org.gephi.layout.plugin.forceAtlas2.ForceAtlas2Builder().buildLayout();
+                current_layout.setBarnesHutOptimize(barnesHut);
+                useLayout = current_layout;
+            }
+            if(layout == null){
+                throw new RuntimeException("layout is null");
+            }
+
+            useLayout.setGraphModel(graphModel);
+            useLayout.initAlgo();
         }
 
         @TearDown(Level.Trial)
         public void tearDown() {
-            layout.endAlgo();
-        }
-    }
-
-    @State(Scope.Thread)
-    public static class SnapshotState {
-
-        private snapshot.org.gephi.layout.plugin.forceAtlas2.ForceAtlas2 layout;
-
-        @Setup(Level.Trial)
-        public void setup() {
-            GraphModel graphModel = RandomGraphs.newRandomGraphModel(NODE_COUNT);
-            layout = new snapshot.org.gephi.layout.plugin.forceAtlas2.ForceAtlas2Builder().buildLayout();
-            layout.setGraphModel(graphModel);
-            layout.initAlgo();
-        }
-
-        @TearDown(Level.Trial)
-        public void tearDown() {
-            layout.endAlgo();
+            useLayout.endAlgo();
         }
     }
 
     @Benchmark
-    public void stable(StableState state) {
-        state.layout.goAlgo();
-    }
-
-    @Benchmark
-    public void snapshot(SnapshotState state) {
-        state.layout.goAlgo();
+    public void goAlgo(BenchmarkState state) {
+        state.useLayout.goAlgo();
     }
 }
